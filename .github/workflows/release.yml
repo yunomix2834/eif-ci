@@ -1,0 +1,278 @@
+name: EIF Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (stable v1.2.3, prerelease v1.2.3-rc.1)
+        required: true
+        type: string
+
+      backend_ref:
+        description: Backend branch/tag/SHA
+        required: true
+        default: main
+        type: string
+
+      frontend_ref:
+        description: Frontend branch/tag/SHA
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: eif-release
+  cancel-in-progress: false
+
+env:
+  NPM_VERSION: "10.9.2"
+  TRIVY_VERSION: "v0.74.0"
+
+jobs:
+  release:
+    name: Build and release EIF
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout eif-ci
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate release inputs
+        id: inputs
+        env:
+          VERSION: ${{ inputs.version }}
+        run: ./scripts/release/validate-inputs.sh
+
+      - name: Validate repository and registry configuration
+        env:
+          EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
+          EIF_BACKEND_REPO: ${{ vars.EIF_BACKEND_REPO }}
+          EIF_FRONTEND_REPO: ${{ vars.EIF_FRONTEND_REPO }}
+          EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
+          EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
+        run: ./scripts/release/validate-config.sh
+
+      - name: Ensure version is not already released
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/release/ensure-release-available.sh "${{ steps.inputs.outputs.version }}"
+
+      - name: Create read-only component GitHub App token
+        id: component-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.EIF_GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.EIF_GITHUB_APP_PRIVATE_KEY }}
+          owner: ${{ vars.EIF_GITHUB_OWNER }}
+          repositories: |
+            ${{ vars.EIF_BACKEND_REPO }}
+            ${{ vars.EIF_FRONTEND_REPO }}
+          permission-actions: read
+          permission-contents: read
+
+      - name: Resolve exact component commits
+        id: resolve
+        env:
+          GH_TOKEN: ${{ steps.component-token.outputs.token }}
+          EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
+        run: |
+          ./scripts/release/resolve-ref.sh \
+            "${{ vars.EIF_BACKEND_REPO }}" \
+            "${{ inputs.backend_ref }}" \
+            backend_sha
+
+          ./scripts/release/resolve-ref.sh \
+            "${{ vars.EIF_FRONTEND_REPO }}" \
+            "${{ inputs.frontend_ref }}" \
+            frontend_sha
+
+      - name: Require successful component CI
+        env:
+          GH_TOKEN: ${{ steps.component-token.outputs.token }}
+          EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
+        run: |
+          ./scripts/release/require-ci-success.sh \
+            "${{ vars.EIF_BACKEND_REPO }}" \
+            "${{ steps.resolve.outputs.backend_sha }}"
+
+          ./scripts/release/require-ci-success.sh \
+            "${{ vars.EIF_FRONTEND_REPO }}" \
+            "${{ steps.resolve.outputs.frontend_sha }}"
+
+      - name: Checkout backend
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.EIF_GITHUB_OWNER }}/${{ vars.EIF_BACKEND_REPO }}
+          ref: ${{ steps.resolve.outputs.backend_sha }}
+          token: ${{ steps.component-token.outputs.token }}
+          path: workspace/backend
+          persist-credentials: false
+
+      - name: Checkout frontend
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.EIF_GITHUB_OWNER }}/${{ vars.EIF_FRONTEND_REPO }}
+          ref: ${{ steps.resolve.outputs.frontend_sha }}
+          token: ${{ steps.component-token.outputs.token }}
+          path: workspace/frontend
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: workspace/backend/go.mod
+          cache: true
+          cache-dependency-path: workspace/backend/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: workspace/frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: workspace/frontend/package-lock.json
+
+      - name: Pin npm
+        run: npm install --global "npm@${NPM_VERSION}"
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@e07451d2e059ed86c2870430ea286b3a9e0bf241
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Build final frontend
+        run: |
+          ./scripts/release/build-frontend.sh \
+            workspace/frontend \
+            "${{ steps.inputs.outputs.version }}"
+
+      - name: Assemble frontend into backend
+        run: ./scripts/release/assemble.sh workspace/frontend workspace/backend
+
+      - name: Create build metadata
+        id: metadata
+        run: echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build Windows and Linux applications
+        env:
+          EIF_VERSION: ${{ steps.inputs.outputs.version }}
+          EIF_BACKEND_SHA: ${{ steps.resolve.outputs.backend_sha }}
+          EIF_FRONTEND_SHA: ${{ steps.resolve.outputs.frontend_sha }}
+          EIF_ORCHESTRATOR_SHA: ${{ github.sha }}
+          EIF_BUILD_TIME: ${{ steps.metadata.outputs.build_time }}
+        run: ./scripts/release/build-binaries.sh workspace/backend dist/binaries
+
+      - name: Smoke test integrated Linux application
+        run: |
+          ./scripts/release/smoke-test.sh \
+            dist/binaries/eif-linux-amd64 \
+            "${{ steps.inputs.outputs.version }}"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build final Linux image
+        uses: docker/build-push-action@v7
+        with:
+          context: workspace/backend
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: eif:release-${{ github.run_id }}-${{ github.run_attempt }}
+          cache-from: type=gha,scope=eif-release
+          cache-to: type=gha,mode=max,scope=eif-release
+          build-args: |
+            EIF_VERSION=${{ steps.inputs.outputs.version }}
+            EIF_BACKEND_COMMIT=${{ steps.resolve.outputs.backend_sha }}
+            EIF_FRONTEND_COMMIT=${{ steps.resolve.outputs.frontend_sha }}
+            EIF_ORCHESTRATOR_COMMIT=${{ github.sha }}
+            EIF_BUILD_TIME=${{ steps.metadata.outputs.build_time }}
+            EIF_SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Scan final Linux image
+        run: |
+          ./scripts/release/trivy-image.sh \
+            "eif:release-${{ github.run_id }}-${{ github.run_attempt }}" \
+            dist/security/final-image
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Publish Linux image
+        env:
+          EIF_VERSION: ${{ steps.inputs.outputs.version }}
+          EIF_CHANNEL: ${{ steps.inputs.outputs.channel }}
+          EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
+          EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
+        run: |
+          ./scripts/release/publish-image.sh \
+            "eif:release-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      - name: Prepare release assets
+        run: ./scripts/release/prepare-release-assets.sh
+
+      - name: Create release notes
+        env:
+          EIF_VERSION: ${{ steps.inputs.outputs.version }}
+          EIF_CHANNEL: ${{ steps.inputs.outputs.channel }}
+          EIF_BACKEND_SHA: ${{ steps.resolve.outputs.backend_sha }}
+          EIF_FRONTEND_SHA: ${{ steps.resolve.outputs.frontend_sha }}
+          EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
+          EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
+        run: ./scripts/release/create-release-notes.sh
+
+      - name: Create checksums
+        run: ./scripts/release/create-checksums.sh
+
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v7
+        with:
+          name: EIF-Windows-x64-${{ inputs.version }}
+          path: dist/windows-portable/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EIF_VERSION: ${{ steps.inputs.outputs.version }}
+          EIF_CHANNEL: ${{ steps.inputs.outputs.channel }}
+          EIF_ORCHESTRATOR_SHA: ${{ github.sha }}
+        run: ./scripts/release/publish-release.sh dist/release
+
+      - name: Release summary
+        if: always()
+        env:
+          VERSION: ${{ steps.inputs.outputs.version }}
+          BACKEND_SHA: ${{ steps.resolve.outputs.backend_sha }}
+          FRONTEND_SHA: ${{ steps.resolve.outputs.frontend_sha }}
+        run: |
+          {
+            echo "## EIF Release"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Version | \`$VERSION\` |"
+            echo "| Backend | \`$BACKEND_SHA\` |"
+            echo "| Frontend | \`$FRONTEND_SHA\` |"
+            echo "| Windows | \`EIF-Windows-x64.zip\` |"
+            echo "| Linux | \`eif-linux-amd64\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
