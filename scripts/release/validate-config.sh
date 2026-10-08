@@ -9,11 +9,13 @@ source "$SCRIPT_DIR/../common.sh"
 : "${EIF_FRONTEND_REPO:?EIF_FRONTEND_REPO is required}"
 : "${EIF_GHCR_IMAGE:?EIF_GHCR_IMAGE is required}"
 : "${EIF_DOCKERHUB_IMAGE:?EIF_DOCKERHUB_IMAGE is required}"
+: "${EIF_GITHUB_APP_CLIENT_ID:?EIF_GITHUB_APP_CLIENT_ID is required}"
 
 [[ "$EIF_GITHUB_OWNER" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid EIF_GITHUB_OWNER"
 [[ "$EIF_BACKEND_REPO" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid EIF_BACKEND_REPO"
 [[ "$EIF_FRONTEND_REPO" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid EIF_FRONTEND_REPO"
 [[ "$EIF_BACKEND_REPO" != "$EIF_FRONTEND_REPO" ]] || die "backend and frontend repository names must differ"
+[[ ! "$EIF_GITHUB_APP_CLIENT_ID" =~ [[:space:]] ]] || die "invalid EIF_GITHUB_APP_CLIENT_ID"
 
 [[ "$EIF_GHCR_IMAGE" == ghcr.io/*/* ]] || die "EIF_GHCR_IMAGE must look like ghcr.io/owner/image"
 [[ "$EIF_DOCKERHUB_IMAGE" != *://* ]] || die "EIF_DOCKERHUB_IMAGE must not include a URL scheme"

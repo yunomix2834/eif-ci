@@ -57,6 +57,7 @@ jobs:
           EIF_FRONTEND_REPO: ${{ vars.EIF_FRONTEND_REPO }}
           EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
           EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
+          EIF_GITHUB_APP_CLIENT_ID: ${{ vars.EIF_GITHUB_APP_CLIENT_ID }}
         run: ./scripts/release/validate-config.sh
 
       - name: Ensure version is not already released
