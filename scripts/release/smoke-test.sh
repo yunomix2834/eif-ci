@@ -4,16 +4,14 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../common.sh
 source "$SCRIPT_DIR/../common.sh"
 
-require_cmd curl
-require_cmd jq
-require_cmd base64
+require_cmd curl jq base64
 
 BINARY=${1:?usage: smoke-test.sh LINUX_AMD64_BINARY VERSION}
 VERSION=${2:?usage: smoke-test.sh LINUX_AMD64_BINARY VERSION}
 [[ -x "$BINARY" ]] || die "binary is not executable: $BINARY"
 
 log "Checking build metadata"
-version_text=$($BINARY --version)
+version_text=$("$BINARY" --version)
 grep -F "EIF $VERSION" <<<"$version_text" >/dev/null || die "binary version metadata does not match $VERSION"
 
 TMP_DIR=$(mktemp -d)

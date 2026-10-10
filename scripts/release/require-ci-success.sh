@@ -4,15 +4,13 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../common.sh
 source "$SCRIPT_DIR/../common.sh"
 
-require_cmd gh
-require_cmd jq
+require_cmd gh jq
 
 REPO=${1:?usage: require-ci-success.sh REPO SHA}
 SHA=${2:?usage: require-ci-success.sh REPO SHA}
-: "${GH_TOKEN:?GH_TOKEN is required}"
-: "${EIF_GITHUB_OWNER:?EIF_GITHUB_OWNER is required}"
+require_env GH_TOKEN EIF_GITHUB_OWNER
 
-[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "SHA must be a full 40-character lowercase commit"
+is_commit_sha "$SHA" || die "SHA must be a full 40-character lowercase commit"
 
 log "Checking CI for $EIF_GITHUB_OWNER/$REPO@$SHA"
 runs=$(gh api --method GET \

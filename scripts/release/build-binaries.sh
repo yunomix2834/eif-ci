@@ -7,11 +7,8 @@ source "$SCRIPT_DIR/../common.sh"
 BACKEND_DIR=${1:?usage: build-binaries.sh BACKEND_DIR OUT_DIR}
 OUT_DIR=${2:?usage: build-binaries.sh BACKEND_DIR OUT_DIR}
 
-: "${EIF_VERSION:?EIF_VERSION is required}"
-: "${EIF_BACKEND_SHA:?EIF_BACKEND_SHA is required}"
-: "${EIF_FRONTEND_SHA:?EIF_FRONTEND_SHA is required}"
-: "${EIF_ORCHESTRATOR_SHA:?EIF_ORCHESTRATOR_SHA is required}"
-: "${EIF_BUILD_TIME:?EIF_BUILD_TIME is required}"
+require_env EIF_VERSION EIF_BACKEND_SHA EIF_FRONTEND_SHA \
+  EIF_ORCHESTRATOR_SHA EIF_BUILD_TIME
 
 mkdir -p "$OUT_DIR"
 OUT_DIR=$(cd "$(dirname "$OUT_DIR")" && pwd)/$(basename "$OUT_DIR")

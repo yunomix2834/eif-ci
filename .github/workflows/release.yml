@@ -38,11 +38,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
+    env:
+      EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
+      EIF_BACKEND_REPO: ${{ vars.EIF_BACKEND_REPO }}
+      EIF_FRONTEND_REPO: ${{ vars.EIF_FRONTEND_REPO }}
+      EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
+      EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
+      EIF_GITHUB_APP_CLIENT_ID: ${{ vars.EIF_GITHUB_APP_CLIENT_ID }}
+
     steps:
       - name: Checkout eif-ci
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Check release scripts offline
+        run: make check
 
       - name: Validate release inputs
         id: inputs
@@ -51,13 +62,6 @@ jobs:
         run: ./scripts/release/validate-inputs.sh
 
       - name: Validate repository and registry configuration
-        env:
-          EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
-          EIF_BACKEND_REPO: ${{ vars.EIF_BACKEND_REPO }}
-          EIF_FRONTEND_REPO: ${{ vars.EIF_FRONTEND_REPO }}
-          EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
-          EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
-          EIF_GITHUB_APP_CLIENT_ID: ${{ vars.EIF_GITHUB_APP_CLIENT_ID }}
         run: ./scripts/release/validate-config.sh
 
       - name: Ensure version is not already released
@@ -82,29 +86,29 @@ jobs:
         id: resolve
         env:
           GH_TOKEN: ${{ steps.component-token.outputs.token }}
-          EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
+          BACKEND_REF: ${{ inputs.backend_ref }}
+          FRONTEND_REF: ${{ inputs.frontend_ref }}
         run: |
           ./scripts/release/resolve-ref.sh \
-            "${{ vars.EIF_BACKEND_REPO }}" \
-            "${{ inputs.backend_ref }}" \
+            "$EIF_BACKEND_REPO" \
+            "$BACKEND_REF" \
             backend_sha
 
           ./scripts/release/resolve-ref.sh \
-            "${{ vars.EIF_FRONTEND_REPO }}" \
-            "${{ inputs.frontend_ref }}" \
+            "$EIF_FRONTEND_REPO" \
+            "$FRONTEND_REF" \
             frontend_sha
 
       - name: Require successful component CI
         env:
           GH_TOKEN: ${{ steps.component-token.outputs.token }}
-          EIF_GITHUB_OWNER: ${{ vars.EIF_GITHUB_OWNER }}
         run: |
           ./scripts/release/require-ci-success.sh \
-            "${{ vars.EIF_BACKEND_REPO }}" \
+            "$EIF_BACKEND_REPO" \
             "${{ steps.resolve.outputs.backend_sha }}"
 
           ./scripts/release/require-ci-success.sh \
-            "${{ vars.EIF_FRONTEND_REPO }}" \
+            "$EIF_FRONTEND_REPO" \
             "${{ steps.resolve.outputs.frontend_sha }}"
 
       - name: Checkout backend
@@ -221,8 +225,6 @@ jobs:
         env:
           EIF_VERSION: ${{ steps.inputs.outputs.version }}
           EIF_CHANNEL: ${{ steps.inputs.outputs.channel }}
-          EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
-          EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
         run: |
           ./scripts/release/publish-image.sh \
             "eif:release-${{ github.run_id }}-${{ github.run_attempt }}"
@@ -236,8 +238,6 @@ jobs:
           EIF_CHANNEL: ${{ steps.inputs.outputs.channel }}
           EIF_BACKEND_SHA: ${{ steps.resolve.outputs.backend_sha }}
           EIF_FRONTEND_SHA: ${{ steps.resolve.outputs.frontend_sha }}
-          EIF_GHCR_IMAGE: ${{ vars.EIF_GHCR_IMAGE }}
-          EIF_DOCKERHUB_IMAGE: ${{ vars.EIF_DOCKERHUB_IMAGE }}
         run: ./scripts/release/create-release-notes.sh
 
       - name: Create checksums
@@ -265,15 +265,4 @@ jobs:
           VERSION: ${{ steps.inputs.outputs.version }}
           BACKEND_SHA: ${{ steps.resolve.outputs.backend_sha }}
           FRONTEND_SHA: ${{ steps.resolve.outputs.frontend_sha }}
-        run: |
-          {
-            echo "## EIF Release"
-            echo
-            echo "| Field | Value |"
-            echo "|---|---|"
-            echo "| Version | \`$VERSION\` |"
-            echo "| Backend | \`$BACKEND_SHA\` |"
-            echo "| Frontend | \`$FRONTEND_SHA\` |"
-            echo "| Windows | \`EIF-Windows-x64.zip\` |"
-            echo "| Linux | \`eif-linux-amd64\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: bash ./scripts/release/write-summary.sh

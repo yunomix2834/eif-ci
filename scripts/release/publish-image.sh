@@ -6,10 +6,7 @@ source "$SCRIPT_DIR/../common.sh"
 
 SOURCE_IMAGE=${1:?usage: publish-image.sh SOURCE_IMAGE}
 require_cmd docker
-: "${EIF_VERSION:?EIF_VERSION is required}"
-: "${EIF_CHANNEL:?EIF_CHANNEL is required}"
-: "${EIF_GHCR_IMAGE:?EIF_GHCR_IMAGE is required}"
-: "${EIF_DOCKERHUB_IMAGE:?EIF_DOCKERHUB_IMAGE is required}"
+require_env EIF_VERSION EIF_CHANNEL EIF_GHCR_IMAGE EIF_DOCKERHUB_IMAGE
 
 publish_tag() {
   local target=$1

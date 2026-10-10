@@ -11,7 +11,25 @@ die() {
 }
 
 require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+  local name
+  for name in "$@"; do
+    command -v "$name" >/dev/null 2>&1 || die "required command not found: $name"
+  done
+}
+
+require_env() {
+  local name
+  for name in "$@"; do
+    [[ -n "${!name:-}" ]] || die "$name is required"
+  done
+}
+
+is_commit_sha() {
+  [[ "$1" =~ ^[0-9a-f]{40}$ ]]
+}
+
+encode_uri_component() {
+  jq -rn --arg value "$1" '$value | @uri'
 }
 
 write_output() {

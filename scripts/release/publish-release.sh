@@ -6,11 +6,7 @@ source "$SCRIPT_DIR/../common.sh"
 
 require_cmd gh
 
-: "${EIF_VERSION:?EIF_VERSION is required}"
-: "${EIF_CHANNEL:?EIF_CHANNEL is required}"
-: "${EIF_ORCHESTRATOR_SHA:?EIF_ORCHESTRATOR_SHA is required}"
-: "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
-: "${GH_TOKEN:?GH_TOKEN is required}"
+require_env EIF_VERSION EIF_CHANNEL EIF_ORCHESTRATOR_SHA GITHUB_REPOSITORY GH_TOKEN
 
 OUT_DIR=${1:-dist/release}
 NOTES="$OUT_DIR/release-notes.md"

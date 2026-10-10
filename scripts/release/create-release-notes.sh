@@ -4,12 +4,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../common.sh
 source "$SCRIPT_DIR/../common.sh"
 
-: "${EIF_VERSION:?EIF_VERSION is required}"
-: "${EIF_CHANNEL:?EIF_CHANNEL is required}"
-: "${EIF_BACKEND_SHA:?EIF_BACKEND_SHA is required}"
-: "${EIF_FRONTEND_SHA:?EIF_FRONTEND_SHA is required}"
-: "${EIF_GHCR_IMAGE:?EIF_GHCR_IMAGE is required}"
-: "${EIF_DOCKERHUB_IMAGE:?EIF_DOCKERHUB_IMAGE is required}"
+require_env EIF_VERSION EIF_CHANNEL EIF_BACKEND_SHA EIF_FRONTEND_SHA \
+  EIF_GHCR_IMAGE EIF_DOCKERHUB_IMAGE
 
 OUT=${1:-dist/release/release-notes.md}
 

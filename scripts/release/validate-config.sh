@@ -4,12 +4,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../common.sh
 source "$SCRIPT_DIR/../common.sh"
 
-: "${EIF_GITHUB_OWNER:?EIF_GITHUB_OWNER is required}"
-: "${EIF_BACKEND_REPO:?EIF_BACKEND_REPO is required}"
-: "${EIF_FRONTEND_REPO:?EIF_FRONTEND_REPO is required}"
-: "${EIF_GHCR_IMAGE:?EIF_GHCR_IMAGE is required}"
-: "${EIF_DOCKERHUB_IMAGE:?EIF_DOCKERHUB_IMAGE is required}"
-: "${EIF_GITHUB_APP_CLIENT_ID:?EIF_GITHUB_APP_CLIENT_ID is required}"
+require_env EIF_GITHUB_OWNER EIF_BACKEND_REPO EIF_FRONTEND_REPO \
+  EIF_GHCR_IMAGE EIF_DOCKERHUB_IMAGE EIF_GITHUB_APP_CLIENT_ID
 
 [[ "$EIF_GITHUB_OWNER" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid EIF_GITHUB_OWNER"
 [[ "$EIF_BACKEND_REPO" =~ ^[A-Za-z0-9_.-]+$ ]] || die "invalid EIF_BACKEND_REPO"

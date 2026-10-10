@@ -1,11 +1,9 @@
-SHELL_SCRIPTS := $(shell find scripts -type f -name '*.sh' -print)
-
-.PHONY: check shell-check
+.PHONY: check shell-check test
 
 shell-check:
-	@for script in $(SHELL_SCRIPTS); do \
-		bash -n "$$script" || exit 1; \
-	done
-	@echo "Shell syntax: OK"
+	bash scripts/check-shell.sh
 
-check: shell-check
+test:
+	bash scripts/tests/release.sh
+
+check: shell-check test

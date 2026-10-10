@@ -21,26 +21,7 @@ WINDOWS_PORTABLE_DIR=$(cd dist/windows-portable && pwd)
 
 cp "$LINUX_BINARY" "$OUT_DIR/eif-linux-amd64"
 cp "$WINDOWS_BINARY" "$WINDOWS_PORTABLE_DIR/EIF.exe"
-cat >"$WINDOWS_PORTABLE_DIR/README-WINDOWS.txt" <<'EOF_README'
-EIF for Windows
-===============
-
-1. Extract EIF-Windows-x64.zip to a normal folder, for example C:\EIF.
-2. Double-click EIF.exe.
-3. EIF starts the local backend and opens the embedded frontend automatically.
-4. Keep the EIF console window open while using the application.
-5. If EIF cannot start, it shows a Windows error dialog instead of closing silently.
-   The same error is written to %LOCALAPPDATA%\Yunomix2834\EIF\startup-error.log.
-
-Security defaults:
-- EIF listens on 127.0.0.1 by default, so it is local to this computer.
-- The session encryption key is generated automatically on first start and
-  protected for the current Windows user with Windows DPAPI.
-
-How to Fix Error:
-- Open Powershell
-- Run this command: Remove-Item "$env:LOCALAPPDATA\Yunomix2834\EIF\hddtgdt-sessions.enc" -ErrorAction SilentlyContinue
-EOF_README
+cp "$SCRIPT_DIR/../../templates/README-WINDOWS.txt" "$WINDOWS_PORTABLE_DIR/README-WINDOWS.txt"
 
 (
   cd "$WINDOWS_PORTABLE_DIR"
